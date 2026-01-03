@@ -1,54 +1,95 @@
-from typing import Any
+from typing import Union
 
-from fastapi import FastAPI, Response
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import FastAPI
 from pydantic import BaseModel, EmailStr
 
 app = FastAPI()
 
-class Item(BaseModel):
-    name: str
-    description: str | None = None
-    price: float
-    tax: float = 10.5
-    tags: list[str] = []
+# class UserIn(BaseModel):
+#     username: str
+#     password: str
+#     email: EmailStr
+#     full_name: str | None = None
 
-class BaseUser(BaseModel):
+# class UserOut(BaseModel):
+#     username: str
+#     email: EmailStr
+#     full_name: str| None = None
+
+# class UserInDB(BaseModel):
+#     username: str
+#     hashed_password: str
+#     email: EmailStr
+#     full_name: str | None = None
+
+class UserBase(BaseModel):
     username: str
     email: EmailStr
     full_name: str | None = None
 
-class UserIn(BaseUser):
+class UserIn(UserBase):
     password: str
 
+class UserOut(UserBase):
+    pass
+
+class UserInDB(UserBase):
+    hashed_password: str
+
+def fake_password_hasher(raw_password: str):
+    return "supersecret" + raw_password
+
+def fake_save_user(user_in: UserIn):
+    hashed_password = fake_password_hasher(
+        user_in.password
+    )
+    user_in_db = UserInDB(
+        **user_in.model_dump(), hashed_password=hashed_password
+    )
+    print("User saved! ..not really")
+    return user_in_db
+
+@app.post("/user/", response_model=UserOut)
+async def create_user(user_in: UserIn):
+    user_saved = fake_save_user(user_in)
+    return user_saved
+
+
+class BaseItem(BaseModel):
+    name: str | None = None
+    description: str
+    # type: str
+
+class CarItem(BaseItem):
+    type: str = "car"
+
+class PlaneItem(BaseItem):
+    type: str = "plane"
+    size: int
+
 items = {
-    "foo": {"name": "Foo", "price": 50.2},
-    "bar": {"name": "Bar", "description": "The bartenders", "price": 62, "tax": 20.2},
-    "baz": {"name": "Baz", "description": None, "price": 50.2, "tax": 10.5, "tags": []},
+    "item1": {"description": "All my friends drive a low rider", "type": "car"},
+    "item2": {
+        "description": "Music is my aeroplane, it's my aeroplane",
+        "size": 5,
+    },
 }
 
-@app.post("/items/", response_model=Item)
-async def create_item(item: Item) -> Any:
-    return item
 
-@app.get("/items/", response_model=list[Item])
-async def read_items() -> Any:
-    return [
-        Item(name="Portal Gun", price=42.0),
-        Item(name="Plumbus", price=32.0),
-    ]
-
-@app.get("/items/{item_id}", Response_model=Item, response_model_exclude_unset=True)
+@app.get("/items/{item_id}", response_model=Union[PlaneItem, CarItem])
 async def read_item(item_id: str):
     return items[item_id]
 
-# Don't do this in procuction!
-@app.post("/user/")
-async def create_user(user: UserIn) -> BaseUser:
-    return user
+items = [
+    {"name": "Foo", "description": "There comes my hero"},
+    {"name": "Red", "description": "It's my aeroplane"},
+]
 
-@app.get("/portal", response_model=None)
-async def get_portal(teleport: bool = False) -> Response | dict:
-    if teleport:
-        return RedirectResponse(url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-    return {"message": "Here's your interdimensional portal."}
+@app.get("/items/", response_model=list[BaseItem])
+async def read_items():
+    return items
+
+@app.get("/keyword-weights/", response_model=dict[str, float])
+async def read_keyword_weights():
+    return {"foo": 2.3, "bar": 3.4}
+
